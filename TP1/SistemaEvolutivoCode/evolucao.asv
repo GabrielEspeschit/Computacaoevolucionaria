@@ -1,0 +1,71 @@
+%% Limpar ambiente Matlab
+clear all; close all; clc;
+
+%% Parâmetros do programa
+Npop = 200;         % Tamanho da população.
+maxgen = 100;       % Número máximo de gerações do processo evolutivo.
+nbits = 8;          % Número de bits empregado na representação do cromossomo
+ncr = 3;            % Número de cromossomos
+plotflag = 1;       % Indicador para exibição da evolução
+pm = 0.01;          % Probabilidade de mutação em um dado locus
+of = 'mimetismo';   % função de fitness
+mort_rand = 0.3;    % probabilidade de morte por causas aleatórias
+mort_pior = 0;     % fração da população que morre por ser menos apta ao ambiente
+env_change = 0;    % probabilidade de mudança ambiental (0 <= env_change <= 1). 
+                    % Valores baixos (<0.2) são mais recomendados
+                    % Se o valor de env_change for maior que 1, o ambiente
+                    % e trocado deterministicamente a cada env_change geraçoes.
+rand('twister',1);
+
+%% Gerar população inicial (aleatória)
+P = round(rand(Npop,nbits*ncr));        % Gerar população
+f = feval(of,P,plotflag,0,env_change);  % Avaliar indivíduos
+[f,ordem] = sort(f);                    % Ordenar por performance
+P = P(ordem,:);                         % Ordenar por performance
+
+%% Ciclo iterativo - gerações
+for ngen=1:maxgen
+    if ngen>25
+        mort_pior=0.2;
+    end
+    % 1) Mortalidade de adultos
+    %   a) Morte por causas aleatórias (p.ex, acidentes, doenças, etc)
+    ac = randperm(Npop);                
+    ac = sort(ac(1:ceil((1-mort_rand)*Npop)));
+    P = P(ac,:);
+    
+    %   b) Morte dos menos aptos (predação).
+    P = P(1:end-ceil(mort_pior*Npop),:);          
+    np = size(P,1);
+    
+    % 2) Seleção para cruzamento e determinação de pontos de corte
+    Pais = ceil(np*rand(ceil(Npop/2),2));           % Seleção de "pais" - aleatória
+    cuts = 2*ceil((nbits/2-1)*rand(Npop/2,ncr));    % Pontos de corte no DNA, por cromossomo
+    
+    % 3) Geração dos "filhos" a partir do cruzamento dos "pais"
+    Fils = zeros(Npop,nbits*ncr);                       
+    for i=1:size(Pais,1)
+        for j=1:ncr
+            Fils(1+2*(i-1),(j-1)*nbits+1:j*nbits) = [P(Pais(i,1),(j-1)*nbits+1:(j-1)*nbits+cuts(i,j)+1),...
+                                                     P(Pais(i,2),(j-1)*nbits+cuts(i,j)+2:j*nbits)];
+            Fils(2*i,(j-1)*nbits+1:j*nbits) = [P(Pais(i,2),(j-1)*nbits+1:(j-1)*nbits+cuts(i,j)+1),...
+                                               P(Pais(i,1),(j-1)*nbits+cuts(i,j)+2:j*nbits)];
+        end
+    end
+    
+    % 4) Ocorrência de eventuais mutações;
+    M = (rand(size(Fils))<=pm);
+    Fils = Fils+M;
+    Fils(find(Fils==2))=0;
+    
+    % 5) Avaliar "filhos" e ordená-los por performance
+    f = feval(of,Fils,plotflag,ngen,env_change,maxgen);
+    [f,ordem] = sort(f);        % Ordenar por performance
+    P = Fils(ordem,:);          % A população de "pais" é substituída pelos "filhos"
+    
+    %if ~mod(ngen,5)
+    %    h=figure(1);
+    %    saveas(h,sprintf('geckos-g%03d.fig',ngen),'fig');
+    %    saveas(h,sprintf('geckos-g%03d.png',ngen),'png');
+    %end
+end
